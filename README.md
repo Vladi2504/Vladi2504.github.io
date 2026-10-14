@@ -21,6 +21,14 @@ statistica/hw1/            HW1: chiave privata → chiave pubblica (curve ellitt
   js/charts.js             mini libreria di grafici SVG
   js/hashes.js             SHA-256 e Keccak-256
   js/secp256k1.js          bonus: la curva reale di Ethereum con BigInt
+statistica/hw2/            HW2: dal seed del wallet all'indirizzo Ethereum
+  js/primitives.js         SHA-256, Keccak-256, SHA3-256, Base58Check; SHA-512/HMAC/PBKDF2 via Web Crypto
+  js/secp256k1.js          secp256k1 veloce (coordinate Jacobiane + tabella 2^i·G)
+  js/wallet.js             BIP-39, BIP-32, BIP-44, indirizzo, EIP-55
+  js/lab.js                laboratorio interattivo della pipeline
+  js/demos.js              attacco xpub, verifica EIP-55, confronto delle hash
+  js/stats2.js             esperimenti statistici E1–E5
+assets/js/charts.js        mini libreria di grafici SVG condivisa
 ```
 
 ## Aggiungere un nuovo homework

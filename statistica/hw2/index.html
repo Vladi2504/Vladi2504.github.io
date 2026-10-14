@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HW2 · Dal seed all'indirizzo</title>
+  <meta name="description" content="Homework 2 di Statistica: la pipeline di un wallet Ethereum (BIP-39, BIP-32, BIP-44, secp256k1, Keccak-256, EIP-55) calcolata passo per passo, con contesto storico e proprietà statistiche.">
+  <script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232a78d6'/%3E%3Ctext x='16' y='21' font-family='Arial' font-weight='700' font-size='13' fill='white' text-anchor='middle'%3EVS%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="../../assets/css/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.querySelector('main'),{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false})"></script>
+</head>
+<body data-root="../../" data-page="statistica">
+  <header data-site-header></header>
+
+  <main class="article">
+    <p class="breadcrumb"><a href="../../">Home</a> / <a href="../">Statistica</a> / HW 2</p>
+
+    <header style="margin-top:20px">
+      <span class="tag">Homework 2</span>
+      <h1 style="margin-top:12px">Dal seed del wallet all'indirizzo Ethereum</h1>
+      <p class="lead muted" style="font-size:1.15rem">
+        Hashing, derivazione delle chiavi e primitive crittografiche: la pipeline completa di un wallet Ethereum,
+        calcolata passo per passo nel browser, con il contesto storico e le proprietà statistiche di ogni passaggio.
+      </p>
+      <div class="doc-meta">
+        <span><b>Studente:</b> Vladut Florian Stanciu</span>
+        <span><b>Corso:</b> Statistica</span>
+        <span><b>Tecnologie:</b> JavaScript, HTML, CSS, Web Crypto API</span>
+        <span><a href="https://github.com/Vladi2504/Vladi2504.github.io/tree/main/statistica/hw2" target="_blank" rel="noopener">Codice sorgente su GitHub</a></span>
+      </div>
+    </header>
+
+    <nav class="toc" aria-label="Indice">
+      <strong>Indice</strong>
+      <ol>
+        <li><a href="#pipeline">La pipeline in breve</a></li>
+        <li><a href="#laboratorio">Laboratorio: la pipeline passo per passo</a></li>
+        <li><a href="#concetti">Cinque concetti da non confondere</a></li>
+        <li><a href="#standard">Il ruolo di ogni standard</a></li>
+        <li><a href="#statistica">Proprietà statistiche</a></li>
+        <li><a href="#storia">Contesto storico e SHA-2 vs SHA-3</a></li>
+        <li><a href="#perche">Perché tante tecniche diverse?</a></li>
+        <li><a href="#wallet">Verifica con un wallet reale</a></li>
+        <li><a href="#conclusioni">Conclusioni e riferimenti</a></li>
+      </ol>
+    </nav>
+
+    <!-- =============================================================== 1 -->
+    <h2 id="pipeline">1. La pipeline in breve</h2>
+    <p>
+      Un wallet come MetaMask, Rabby o Exodus non conserva le chiavi una per una. Conserva un unico segreto, la
+      <b>frase mnemonica</b> di 12 o 24 parole, e da quella <i>ricalcola</i> ogni volta tutte le chiavi e tutti gli indirizzi.
+      Ogni freccia dello schema è uno standard diverso, che usa una primitiva crittografica diversa per uno scopo diverso.
+      Il colore indica la categoria dell'operazione (sezione 3).
+    </p>
+    <div class="flow" role="img" aria-label="Schema della pipeline dal seed all'indirizzo">
+      <div class="node gen"><b>Entropia</b><span class="chip gen">Generazione</span><span class="d">128–256 bit casuali da un generatore crittografico: l'unico passaggio non deterministico</span></div>
+      <div class="edge">BIP-39: entropia + checksum SHA-256, gruppi da 11 bit → parole</div>
+      <div class="node enc"><b>Frase mnemonica</b><span class="chip enc">Codifica + checksum</span><span class="d">es. "abandon abandon … about", trascrivibile su carta</span></div>
+      <div class="edge">BIP-39: PBKDF2-HMAC-SHA512, 2048 iterazioni (+ passphrase opzionale)</div>
+      <div class="node der"><b>Seed (512 bit)</b><span class="chip der">Derivazione</span><span class="d">il segreto "binario" da cui nasce tutto il wallet</span></div>
+      <div class="edge">BIP-32 / BIP-44: HMAC-SHA512 lungo il percorso m/44'/60'/0'/0/i</div>
+      <div class="node der"><b>Chiave privata (256 bit)</b><span class="chip der">Derivazione</span><span class="d">una per ogni account, tutte dallo stesso seed</span></div>
+      <div class="edge">secp256k1: K = k·G (come nell'HW1, ma con numeri di 256 bit)</div>
+      <div class="node pk"><b>Chiave pubblica (512 bit)</b><span class="chip pk">Chiave pubblica</span><span class="d">il punto (x, y) della curva; serve a verificare le firme</span></div>
+      <div class="edge">Keccak-256, si tengono gli ultimi 20 byte</div>
+      <div class="node hash"><b>Indirizzo (160 bit)</b><span class="chip hash">Hashing</span><span class="d">0x9858effd232b4033e47d90003d41ec34ecaeda94</span></div>
+      <div class="edge">EIP-55: maiuscole e minuscole secondo un secondo hash Keccak-256</div>
+      <div class="node cs"><b>Indirizzo con checksum</b><span class="chip cs">Checksum</span><span class="d">0x9858EfFD232B4033E47d90003D41EC34EcaEda94</span></div>
+    </div>
+
+    <!-- =============================================================== 2 -->
+    <h2 id="laboratorio">2. Laboratorio: la pipeline passo per passo</h2>
+    <p>
+      Il programma esegue <b>davvero</b> tutta la pipeline nel browser: SHA-256, Keccak-256 e secp256k1 sono implementate in JavaScript,
+      mentre HMAC-SHA512 e PBKDF2 usano la Web Crypto API. Si può partire da due frasi di test pubbliche o generarne una nuova.
+      Per le frasi di test il risultato viene confrontato con gli indirizzi noti, quindi la pipeline è verificata
+      sugli stessi valori che mostrano i wallet reali.
+    </p>
+    <div class="callout warn">
+      <p><b>Attenzione:</b> non inserire mai una frase mnemonica reale in una pagina web, nemmeno in questa. Le frasi di test qui sotto sono
+        pubbliche e chiunque ne conosce le chiavi.</p>
+    </div>
+    <div class="panel wide">
+      <div class="controls">
+        <label class="field" style="flex:1 1 300px">Frase di partenza
+          <select id="lab-preset"></select>
+        </label>
+        <label class="field" style="flex:1 1 300px">Schema di derivazione (wallet)
+          <select id="lab-scheme"></select>
+        </label>
+        <label class="field">Account i
+          <input id="lab-idx" type="number" min="0" max="1000" step="1" value="0">
+        </label>
+      </div>
+      <label class="field" style="margin-bottom:12px">Frase mnemonica (modificabile)
+        <textarea id="lab-phrase" class="field-ta" rows="2" spellcheck="false" autocomplete="off"></textarea>
+      </label>
+      <div class="controls">
+        <label class="field">Passphrase BIP-39 (opzionale, "25ª parola")
+          <input id="lab-pass" type="text" placeholder="vuota" autocomplete="off" spellcheck="false">
+        </label>
+        <div class="btn-row">
+          <button class="btn primary" id="lab-run" type="button">Esegui la pipeline</button>
+          <button class="btn" id="lab-mutate" type="button">Cambia una parola a caso</button>
+        </div>
+      </div>
+      <p class="small muted" id="lab-wordlist" style="margin:0 0 6px">Caricamento della lista di parole BIP-39…</p>
+      <p id="lab-status" style="margin:0" aria-live="polite"></p>
+    </div>
+
+    <div class="stage-list" id="lab-out"></div>
+
+    <h3>Gli account come li mostra un wallet</h3>
+    <p class="small muted">Gli stessi passi ripetuti per i = 0 … 4 con lo schema scelto, cioè gli account che un wallet crea premendo "Aggiungi account".</p>
+    <div class="table-wrap" id="lab-accounts"></div>
+
+    <!-- =============================================================== 3 -->
+    <h2 id="concetti">3. Cinque concetti da non confondere</h2>
+    <p>
+      La traccia chiede di distinguere generazione e derivazione delle chiavi, crittografia a chiave pubblica, hashing, checksum e codifica.
+      Spesso usano gli stessi "mattoni": per esempio SHA-256 compare sia in una checksum sia dentro una derivazione. Quello che cambia è
+      lo <b>scopo</b> e le <b>proprietà</b> garantite.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Concetto</th><th>Che cosa fa</th><th>Dove compare nella pipeline</th><th>Segreto?</th><th>Invertibile?</th></tr></thead>
+        <tbody>
+          <tr><td><span class="chip gen">Generazione di chiavi</span></td><td>Crea un segreto <b>nuovo</b> da una sorgente casuale. Non è deterministica.</td><td>I 128–256 bit di entropia, una sola volta alla creazione del wallet</td><td class="yes">Sì</td><td>—</td></tr>
+          <tr><td><span class="chip der">Derivazione di chiavi</span></td><td>Funzione <b>deterministica</b> che ricava nuove chiavi da un segreto esistente (KDF/PRF). Stesso input, stesse chiavi: per questo basta un backup.</td><td>PBKDF2 (seed BIP-39); HMAC-SHA512 (chiave master e figli BIP-32); percorsi BIP-44</td><td class="yes">Sì</td><td class="no">No (one-way)</td></tr>
+          <tr><td><span class="chip pk">Crittografia a chiave pubblica</span></td><td>Una coppia (k, K) legata da una relazione facile in un verso e intrattabile nell'altro. Permette di <b>firmare</b> e di verificare le firme senza rivelare k.</td><td>secp256k1: K = k·G; firme ECDSA delle transazioni</td><td>k sì, K no</td><td class="no">No (ECDLP)</td></tr>
+          <tr><td><span class="chip hash">Hashing</span></td><td>Impronta di <b>lunghezza fissa</b>, senza chiave, resistente a preimmagini e collisioni e priva di struttura.</td><td>Keccak-256(K) → indirizzo; SHA-256 nella checksum BIP-39; SHA-512 dentro HMAC e PBKDF2</td><td class="no">No</td><td class="no">No</td></tr>
+          <tr><td><span class="chip cs">Checksum</span></td><td>Ridondanza aggiunta per rilevare <b>errori accidentali</b>, non attacchi intenzionali.</td><td>Ultimi 4–8 bit della mnemonica; maiuscole EIP-55; 4 byte di Base58Check (xprv/xpub)</td><td class="no">No</td><td>Si scarta</td></tr>
+          <tr><td><span class="chip enc">Codifica</span></td><td>Cambio di <b>rappresentazione</b> reversibile, senza segreti e senza sicurezza.</td><td>Bit → parole (BIP-39); byte → esadecimale (0x…); Base58 (xprv); maiuscole/minuscole (EIP-55)</td><td class="no">No</td><td class="yes">Sì</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Tre osservazioni:</p>
+    <ul>
+      <li><b>La frase mnemonica è una codifica, non una cifratura.</b> Le 12 parole sono l'entropia scritta in un altro alfabeto
+        (2048 "simboli" da 11 bit), più una checksum. Chi le legge ha tutte le chiavi.</li>
+      <li><b>Generazione e derivazione sono diverse.</b> Tutta la casualità entra nel primo passaggio. Da lì in poi tutto è deterministico,
+        ed è questo che permette di ricostruire il wallet su un altro dispositivo con la sola frase. La sicurezza dell'intero wallet
+        non supera quella dell'entropia iniziale.</li>
+      <li><b>Hash e checksum non sono la stessa cosa.</b> EIP-55 <i>usa</i> Keccak-256, ma il suo scopo è rilevare errori di battitura.
+        Un attaccante può generare indirizzi con checksum valida a piacere. Allo stesso modo HMAC e PBKDF2 sono costruiti con SHA-512,
+        ma servono a <i>derivare</i> chiavi.</li>
+    </ul>
+
+    <!-- =============================================================== 4 -->
+    <h2 id="standard">4. Il ruolo di ogni standard</h2>
+    <div class="std-grid">
+      <div class="std-card">
+        <h3>BIP-39 <span class="chip enc">Codifica</span> <span class="chip der">Derivazione</span></h3>
+        <div class="year">2013 · M. Palatinus, P. Rusnak, A. Voisine, S. Bowe</div>
+        <p><b>Frase mnemonica e seed.</b> Trasforma 128–256 bit di entropia in 12–24 parole facili da trascrivere, con una checksum di
+          ENT/32 bit presa da SHA-256. Poi trasforma la frase nel seed di 512 bit con PBKDF2-HMAC-SHA512 (2048 iterazioni).</p>
+        <dl><dt>Input</dt><dd>entropia; frase + passphrase</dd><dt>Output</dt><dd>frase; seed di 64 byte</dd><dt>Primitive</dt><dd>SHA-256, HMAC-SHA512, PBKDF2</dd></dl>
+      </div>
+      <div class="std-card">
+        <h3>BIP-32 <span class="chip der">Derivazione</span></h3>
+        <div class="year">2012 · P. Wuille</div>
+        <p><b>Wallet gerarchici deterministici (HD).</b> Dal seed nasce una chiave master con un <i>chain code</i>. Ogni chiave può
+          generare 2³² figli con HMAC-SHA512, formando un albero di chiavi. Introduce le chiavi estese xprv/xpub e la distinzione tra figli
+          <i>normali</i>, derivabili anche dalla sola chiave pubblica, e <i>hardened</i>.</p>
+        <dl><dt>Input</dt><dd>seed; (chiave, chain code, indice)</dd><dt>Output</dt><dd>chiave figlia + chain code</dd><dt>Primitive</dt><dd>HMAC-SHA512, secp256k1</dd></dl>
+      </div>
+      <div class="std-card">
+        <h3>BIP-44 <span class="chip der">Derivazione</span></h3>
+        <div class="year">2014 · M. Palatinus, P. Rusnak</div>
+        <p><b>Percorsi standard.</b> Fissa la struttura dell'albero
+          <code>m / purpose' / coin_type' / account' / change / address_index</code>. Il coin type viene dal registro SLIP-44 (60 = Ether).
+          Senza questa convenzione la stessa frase darebbe indirizzi diversi in wallet diversi.</p>
+        <dl><dt>Input</dt><dd>albero BIP-32</dd><dt>Output</dt><dd>m/44'/60'/0'/0/i</dd><dt>Primitive</dt><dd>nessuna: è una convenzione</dd></dl>
+      </div>
+      <div class="std-card">
+        <h3>secp256k1 <span class="chip pk">Chiave pubblica</span></h3>
+        <div class="year">SEC 2, 2000 · usata da Bitcoin (2009) ed Ethereum (2015)</div>
+        <p><b>Curva ellittica</b> y² = x³ + 7 su un primo di 256 bit. Dà la relazione K = k·G tra chiave privata e pubblica (HW1) e le
+          <b>firme ECDSA</b> delle transazioni. Da una firma Ethereum si può <i>recuperare</i> la chiave pubblica, quindi on-chain basta l'indirizzo.</p>
+        <dl><dt>Input</dt><dd>chiave privata k</dd><dt>Output</dt><dd>punto K = (x, y)</dd><dt>Sicurezza</dt><dd>ECDLP, ≈ 2¹²⁸ operazioni</dd></dl>
+      </div>
+      <div class="std-card">
+        <h3>Keccak-256 <span class="chip hash">Hashing</span></h3>
+        <div class="year">2008 (proposta) · vincitore della competizione SHA-3 nel 2012</div>
+        <p><b>Funzione hash</b> a spugna. In Ethereum l'indirizzo sono gli ultimi 20 byte di Keccak-256(x ‖ y): una stringa corta,
+          uniforme e senza struttura algebrica. Ethereum la usa ovunque (indirizzi, firme dei metodi, storage). È la versione originale,
+          <b>non</b> la SHA3-256 standardizzata (sezione 6).</p>
+        <dl><dt>Input</dt><dd>64 byte della chiave pubblica</dd><dt>Output</dt><dd>32 byte, ne servono 20</dd><dt>Primitive</dt><dd>permutazione Keccak-f[1600]</dd></dl>
+      </div>
+      <div class="std-card">
+        <h3>EIP-55 <span class="chip cs">Checksum</span> <span class="chip enc">Codifica</span></h3>
+        <div class="year">2016 · V. Buterin, A. Van de Sande</div>
+        <p><b>Checksum con maiuscole e minuscole.</b> Senza cambiare l'indirizzo né il formato esadecimale, mette in maiuscolo le lettere
+          dove il corrispondente nibble di Keccak-256(indirizzo) è ≥ 8. È compatibile con il software esistente, che ignora le maiuscole.</p>
+        <dl><dt>Input</dt><dd>indirizzo in minuscolo</dd><dt>Output</dt><dd>stesso indirizzo, ~15 bit di controllo</dd><dt>Primitive</dt><dd>Keccak-256</dd></dl>
+      </div>
+    </div>
+
+    <h3>Esperimento: perché alcuni livelli sono "hardened"</h3>
+    <p>
+      Un figlio normale (non-hardened) si calcola come \(k_i = k_{\text{par}} + I_L \bmod n\), dove
+      \(I_L = \text{HMAC-SHA512}(c_{\text{par}},\, K_{\text{par}} \,\|\, i)\) dipende solo da dati <b>pubblici</b>: la chiave
+      pubblica estesa (xpub). Questo permette a un wallet "watch-only" di generare indirizzi senza chiavi private. Ma se trapela anche
+      <i>una sola</i> chiave privata figlia, l'equazione si può risolvere per \(k_{\text{par}}\). L'esperimento lo fa sulla frase del laboratorio:
+    </p>
+    <div class="panel">
+      <button class="btn" id="xpub-run" type="button">Esegui l'attacco sulla frase del laboratorio</button>
+      <div id="xpub-out" style="margin-top:12px"></div>
+    </div>
+
+    <h3>Prova la checksum EIP-55</h3>
+    <div class="panel">
+      <div class="controls">
+        <label class="field" style="flex:1 1 100%">Indirizzo
+          <input id="eip-in" class="wide-input" type="text" spellcheck="false" autocomplete="off">
+        </label>
+        <div class="btn-row">
+          <button class="btn primary" id="eip-check" type="button">Verifica</button>
+          <button class="btn" id="eip-typo" type="button">Introduci un errore di battitura</button>
+        </div>
+      </div>
+      <div id="eip-out" aria-live="polite"></div>
+    </div>
+
+    <!-- =============================================================== 5 -->
+    <h2 id="statistica">5. Proprietà statistiche</h2>
+    <p>
+      Ogni categoria di operazione ha proprietà statistiche diverse, e le si può misurare. La <b>generazione</b> deve produrre
+      bit uniformi e indipendenti. La <b>codifica</b> li conserva senza aggiungere né togliere informazione. <b>Hashing</b> e
+      <b>derivazione</b> devono dare output indistinguibili da bit casuali, con effetto valanga. Le <b>checksum</b> si giudicano
+      dalla probabilità di non rilevare un errore. Gli esperimenti partono da soli al caricamento e si possono ripetere.
+    </p>
+
+    <h3 id="e1">E1 · Le parole BIP-39 sono uniformi?</h3>
+    <p>
+      Da entropia uniforme ogni gruppo di 11 bit è uniforme su 2048 valori, quindi ogni parola dovrebbe comparire con probabilità 1/2048.
+      L'ultima parola fa eccezione: contiene 7 bit di entropia e 4 bit di checksum. Anche la checksum però è l'output di una funzione hash,
+      quindi ci si aspetta che pure l'ultima parola risulti uniforme.
+    </p>
+    <div class="btn-row" style="margin-bottom:8px"><button class="btn" id="e1-run" type="button">Ripeti E1</button><span class="progress" id="e1-status"></span></div>
+    <div id="e1-chart"></div>
+    <div class="table-wrap" id="e1-table" style="margin-top:12px"></div>
+
+    <h3 id="e2">E2 · Effetto valanga lungo la pipeline</h3>
+    <p>
+      Si prendono due entropie che differiscono per <b>un solo bit</b> e si calcola tutta la pipeline per entrambe. Il grafico mostra
+      la frazione di bit cambiati a ogni passaggio. È la misura più diretta della differenza tra <i>codifica</i>, dove il cambiamento resta
+      locale, e <i>hashing/derivazione</i>, dove si diffonde a metà dei bit.
+    </p>
+    <div class="btn-row" style="margin-bottom:8px"><button class="btn" id="e2-run" type="button">Ripeti E2</button><span class="progress" id="e2-status"></span></div>
+    <div id="e2-chart"></div>
+    <div class="table-wrap" id="e2-table" style="margin-top:12px"></div>
+    <p class="obs" id="e2-obs"></p>
+
+    <h3 id="e3">E3 · Gli indirizzi di un wallet</h3>
+    <p>
+      I primi 512 indirizzi della frase del laboratorio (m/44'/60'/0'/0/0 … /511). Sono tutti figli dello stesso genitore e hanno
+      indici consecutivi, eppure dovrebbero sembrare indipendenti. Il secondo grafico conta le lettere a–f di ogni indirizzo, cioè i
+      bit di checksum EIP-55 disponibili: se le cifre sono uniformi, seguono una binomiale(40, 6/16).
+    </p>
+    <div class="btn-row" style="margin-bottom:8px"><button class="btn" id="e3-run" type="button">Ripeti E3 ed E4</button><span class="progress" id="e3-status"></span></div>
+    <div class="charts-2">
+      <div><p class="chart-title">Frequenza delle cifre esadecimali</p><div id="e3-hex"></div></div>
+      <div><p class="chart-title">Lettere per indirizzo</p><div id="e3-letters"></div></div>
+    </div>
+    <div class="table-wrap" id="e3-table" style="margin-top:12px"></div>
+
+    <h3 id="e4">E4 · Quanto bene le checksum rilevano gli errori?</h3>
+    <p>
+      Si simulano errori di battitura sugli indirizzi di E3 e sostituzioni di parole nelle frasi, e si conta quanti errori passano
+      inosservati. La teoria: una checksum di \(c\) bit "uniformi" lascia passare un errore casuale con probabilità \(2^{-c}\).
+      Per EIP-55 \(c\) varia da indirizzo a indirizzo (il numero di lettere). In media, come indicato anche nella specifica:
+    </p>
+    $$P(\text{errore non rilevato}) = \mathbb{E}\left[2^{-L}\right] = \left(\tfrac{10}{16} + \tfrac{6}{16}\cdot\tfrac12\right)^{40} = \left(\tfrac{13}{16}\right)^{40} \approx 0{,}0247\%$$
+    <div class="btn-row" style="margin-bottom:8px"><button class="btn" id="e4-run" type="button">Ripeti E4</button><span class="progress" id="e4-status"></span></div>
+    <div class="table-wrap" id="e4-table"></div>
+    <p class="obs" id="e4-obs"></p>
+
+    <h3 id="e5">E5 · SHA-256, Keccak-256, SHA3-256 e SHA-512 a confronto</h3>
+    <p>
+      Le funzioni hash della pipeline, messe alla prova con lo stesso test di valanga: si inverte un bit di un input casuale di 32 byte
+      e si contano i bit cambiati nel digest. Per un "oracolo casuale" il numero segue una binomiale(256, ½), cioè 128 ± 8.
+      L'ultima riga confronta Keccak-256 e SHA3-256 sullo <b>stesso</b> input.
+    </p>
+    <div class="btn-row" style="margin-bottom:8px"><button class="btn" id="e5-run" type="button">Ripeti E5</button><span class="progress" id="e5-status"></span></div>
+    <div class="legend">
+      <span><span class="key" style="background:var(--series-1)"></span>SHA-256</span>
+      <span><span class="key" style="background:var(--series-2)"></span>Keccak-256</span>
+      <span><span class="key" style="background:var(--series-3)"></span>SHA3-256</span>
+      <span><span class="key line" style="background:var(--text)"></span>atteso (binomiale)</span>
+    </div>
+    <div id="e5-chart"></div>
+    <div class="table-wrap" id="e5-table" style="margin-top:12px"></div>
+
+    <h3>Che cosa dicono i numeri</h3>
+    <ul>
+      <li><b>Tutta la sicurezza viene dall'entropia.</b> Una funzione deterministica non aggiunge incertezza: \(H(f(X)) \le H(X)\).
+        Il seed è lungo 512 bit, ma con 12 parole ha al più 128 bit di entropia, tanti quanti l'entropia di partenza.
+        La passphrase è l'unico modo per aggiungerne dopo la generazione.</li>
+      <li><b>Codifica e checksum sono "trasparenti" e misurabili.</b> Le parole risultano uniformi (E1), un bit cambiato nell'entropia
+        cambia solo una o due parole (E2), e le checksum rilevano gli errori con le probabilità previste: 1/16, 1/256 e (13/16)<sup>40</sup> (E4).</li>
+      <li><b>Hashing e derivazione si comportano come funzioni casuali.</b> Dal seed in poi ogni passaggio cambia circa il 50% dei bit (E2).
+        Gli indirizzi hanno cifre uniformi e indirizzi consecutivi sono incorrelati (E3). Le quattro funzioni hash sono indistinguibili
+        nel test di valanga (E5).</li>
+      <li><b>Come nell'HW1, la statistica non basta.</b> Gli indirizzi consecutivi sembrano indipendenti, ma l'esperimento della sezione 4
+        mostra una relazione algebrica esatta tra chiavi non-hardened: \(k_i - k_{\text{par}} = I_L\). I test statistici controllano la
+        "casualità apparente". La sicurezza richiede in più l'analisi della struttura.</li>
+    </ul>
+
+    <!-- =============================================================== 6 -->
+    <h2 id="storia">6. Contesto storico e SHA-2 vs SHA-3</h2>
+    <p>
+      La pipeline mette insieme strumenti nati in quarant'anni e in comunità diverse: crittografia accademica, standard NIST,
+      Bitcoin Improvement Proposals (BIP) ed Ethereum Improvement Proposals (EIP). Le date indicate nella traccia sono marcate.
+    </p>
+    <div class="timeline">
+      <div class="tl-item pk task"><span class="y">1977</span><span class="t">RSA</span>
+        <p>Rivest, Shamir e Adleman: il primo sistema pratico di crittografia a chiave pubblica e di firma digitale, un anno dopo l'idea di Diffie ed Hellman (1976).</p></div>
+      <div class="tl-item pk"><span class="y">1985</span><span class="t">Crittografia su curve ellittiche</span>
+        <p>Koblitz e Miller propongono indipendentemente le curve ellittiche: la stessa sicurezza di RSA con chiavi molto più corte (256 bit contro ~3072).</p></div>
+      <div class="tl-item der"><span class="y">1997–2000</span><span class="t">HMAC e PBKDF2</span>
+        <p>HMAC (RFC 2104, 1997) e PBKDF2 (PKCS #5 v2.0, RFC 2898, 2000): i mattoni che BIP-32 e BIP-39 useranno per derivare le chiavi.</p></div>
+      <div class="tl-item pk"><span class="y">2000</span><span class="t">secp256k1 (SEC 2)</span>
+        <p>Certicom pubblica i parametri raccomandati per le curve ellittiche, tra cui la curva di Koblitz secp256k1.</p></div>
+      <div class="tl-item hash task"><span class="y">2001</span><span class="t">SHA-2 (SHA-256, SHA-512)</span>
+        <p>Progettata dalla NSA e standardizzata dal NIST (FIPS 180-2). Nella pipeline: SHA-256 per la checksum BIP-39, SHA-512 dentro HMAC e PBKDF2.</p></div>
+      <div class="tl-item eco"><span class="y">2009</span><span class="t">Bitcoin</span>
+        <p>Usa secp256k1 e SHA-256. Da qui nascono le BIP, che Ethereum erediterà per la gestione delle chiavi.</p></div>
+      <div class="tl-item der task"><span class="y">2012</span><span class="t">BIP-32: wallet HD</span>
+        <p>Un solo seed per un albero illimitato di chiavi. Nello stesso anno Keccak vince la competizione SHA-3 del NIST (2007–2012).</p></div>
+      <div class="tl-item der task"><span class="y">2013</span><span class="t">BIP-39: frase mnemonica</span>
+        <p>Il seed diventa una frase di parole comuni, facile da trascrivere e da controllare.</p></div>
+      <div class="tl-item der task"><span class="y">2014</span><span class="t">BIP-44: percorsi multi-account</span>
+        <p>La struttura m/44'/coin'/account'/change/index rende i wallet interoperabili e multi-valuta.</p></div>
+      <div class="tl-item eco"><span class="y">2015</span><span class="t">Ethereum (luglio)</span>
+        <p>Il mainnet parte usando Keccak-256 nella versione originale della competizione, scelta durante lo sviluppo (2014) prima che lo standard fosse finale.</p></div>
+      <div class="tl-item hash task"><span class="y">2015</span><span class="t">SHA-3 (FIPS 202, agosto)</span>
+        <p>Il NIST standardizza SHA-3 basata su Keccak, con un padding diverso (separazione di dominio). Da qui la differenza tra Keccak-256 e SHA3-256.</p></div>
+      <div class="tl-item cs task"><span class="y">2016</span><span class="t">EIP-55: indirizzi con checksum</span>
+        <p>Una checksum retrocompatibile per gli indirizzi Ethereum, per ridurre il rischio di perdere fondi inviandoli a un indirizzo ricopiato male.</p></div>
+    </div>
+
+    <h3>SHA-2 / SHA-512 e Keccak / SHA-3</h3>
+    <p>
+      Sono due famiglie di funzioni hash crittografiche con gli stessi obiettivi di sicurezza, ma costruite in modo completamente diverso.
+      SHA-3 non è nata per sostituire SHA-2, che non è stata violata: serviva un'alternativa basata su un principio diverso, nel caso un attacco
+      contro la struttura di SHA-2 (simile a quelli che avevano colpito MD5 e SHA-1) l'avesse resa insicura.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>SHA-2 (SHA-256, SHA-512)</th><th>Keccak / SHA-3</th></tr></thead>
+        <tbody>
+          <tr><td>Progettisti</td><td>NSA, pubblicata dal NIST (2001)</td><td>Bertoni, Daemen, Peeters, Van Assche (proposta 2008, vincitrice 2012, FIPS 202 nel 2015)</td></tr>
+          <tr><td>Costruzione</td><td>Merkle–Damgård: una funzione di compressione applicata a blocchi in catena</td><td>Spugna: una permutazione fissa di 1600 bit, si "assorbe" l'input e si "spreme" l'output</td></tr>
+          <tr><td>Stato interno</td><td>256 bit (SHA-256) o 512 bit (SHA-512)</td><td>1600 bit = rate + capacità (per 256 bit di output: 1088 + 512)</td></tr>
+          <tr><td>Length-extension</td><td class="no">Vulnerabile: da H(m) si calcola H(m ‖ x) senza conoscere m. Per questo con una chiave si usa HMAC</td><td class="yes">Non vulnerabile: la capacità non viene mai rivelata</td></tr>
+          <tr><td>Nella pipeline</td><td>SHA-256 nella checksum BIP-39; SHA-512 in HMAC-SHA512 e PBKDF2 (BIP-39, BIP-32)</td><td>Keccak-256 per gli indirizzi ed EIP-55; SHA3-256 non è usata</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      <b>Keccak-256 ≠ SHA3-256.</b> Le due funzioni hanno la stessa permutazione, la stessa capacità e la stessa lunghezza di output.
+      Nello standard FIPS 202 il NIST ha però aggiunto dei bit di <i>separazione di dominio</i> prima del padding: il primo byte di
+      padding diventa <code>0x06</code> invece di <code>0x01</code>. Ethereum aveva già adottato la versione originale e la mantiene.
+      Il risultato sono due funzioni con output completamente diversi:
+    </p>
+    <div class="panel">
+      <label class="field" style="margin-bottom:10px">Testo da sottoporre a hash
+        <input id="hash-in" class="wide-input" type="text" value="abc" spellcheck="false" autocomplete="off">
+      </label>
+      <button class="btn" id="hash-run" type="button" style="margin-bottom:10px">Calcola</button>
+      <div class="table-wrap" id="hash-out"></div>
+      <p class="obs" id="hash-obs"></p>
+    </div>
+
+    <!-- =============================================================== 7 -->
+    <h2 id="perche">7. Perché tante tecniche diverse?</h2>
+    <p>
+      Nessuna primitiva da sola soddisfa tutti i requisiti di un wallet, perché i requisiti si contraddicono. Un segreto da ricordare deve
+      essere corto e leggibile; una chiave di firma deve avere una struttura algebrica; un identificatore pubblico deve essere privo di struttura.
+      Ogni passaggio fa una sola cosa, con lo strumento progettato e analizzato per quello scopo.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Requisito</th><th>Chi lo soddisfa</th><th>Perché un'altra primitiva non andrebbe bene</th></tr></thead>
+        <tbody>
+          <tr><td>Un backup che una persona possa trascrivere e ricontrollare</td><td><span class="chip enc">BIP-39</span></td><td>Una chiave di 64 cifre esadecimali si ricopia male. Le parole da una lista fissa, con checksum, sono pensate per gli esseri umani.</td></tr>
+          <tr><td>Un solo backup per infiniti account, separati tra loro</td><td><span class="chip der">BIP-32</span></td><td>Con chiavi generate indipendentemente servirebbe un nuovo backup per ogni account. La derivazione deterministica le ricalcola tutte dal seed.</td></tr>
+          <tr><td>Wallet diversi trovano gli stessi account</td><td><span class="chip der">BIP-44</span></td><td>È una convenzione, non un algoritmo: senza, ogni software potrebbe scegliere un percorso diverso (come fa ancora Ledger Live).</td></tr>
+          <tr><td>Firmare transazioni che chiunque può verificare</td><td><span class="chip pk">secp256k1</span></td><td>Una hash o una HMAC non danno una coppia privata/pubblica: con HMAC chi verifica deve conoscere la stessa chiave segreta. Serve un'asimmetria.</td></tr>
+          <tr><td>Un identificatore corto, uniforme e senza struttura</td><td><span class="chip hash">Keccak-256</span></td><td>La chiave pubblica ha 64 byte e una struttura algebrica (HW1). L'hash la comprime a 20 byte e non la rivela finché non si firma.</td></tr>
+          <tr><td>Accorgersi di un indirizzo ricopiato male</td><td><span class="chip cs">EIP-55</span></td><td>Cambiare formato (per esempio passare a Base58Check) avrebbe rotto la compatibilità. Le maiuscole aggiungono ~15 bit di controllo a costo zero.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      C'è anche un motivo di ingegneria: <b>separare le responsabilità</b>. Ogni primitiva ha un modello di sicurezza ben studiato (PRF,
+      resistenza alle collisioni, ECDLP), e un problema in uno strato non si propaga automaticamente agli altri. In più, riusare standard
+      esistenti e già analizzati è molto più sicuro che inventare un algoritmo "unico". Per questo i wallet Ethereum usano ancora BIP nate
+      per Bitcoin, compresa la stringa "Bitcoin seed" visibile al passo 4 del laboratorio.
+    </p>
+
+    <!-- =============================================================== 8 -->
+    <h2 id="wallet">8. Verifica con un wallet reale</h2>
+    <p>
+      La traccia suggerisce di provare un wallet software (MetaMask, Rabby, Exodus, Rainbow…). La procedura qui sotto confronta un wallet
+      reale con il laboratorio usando una frase di test pubblica, senza rischi.
+    </p>
+    <ol>
+      <li>In un profilo del browser separato, installa MetaMask (o Rabby) dallo store ufficiale e scegli <i>Importa un wallet esistente</i>.</li>
+      <li>Inserisci la frase di test <code>test test test test test test test test test test test junk</code>. Non usarla mai per fondi
+        veri: è pubblica e i bot svuotano all'istante qualsiasi saldo.</li>
+      <li>Il primo account mostra <span class="mono">0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266</span>. Con <i>Aggiungi account</i> compare
+        <span class="mono">0x70997970C51812dc3A010C7d01b50e0d17dc79C8</span>: sono gli stessi indirizzi del laboratorio con lo schema
+        standard (la tabella "Gli account come li mostra un wallet").</li>
+      <li><i>Dettagli account → Mostra chiave privata</i> rivela <span class="mono">0xac0974…ff80</span>, cioè il passo 6 del laboratorio.</li>
+      <li>Selezionando "Ledger Live" nel laboratorio, il primo indirizzo è uguale ma dal secondo in poi cambia: la stessa frase in un wallet
+        con un altro percorso BIP-44 mostra account diversi. Per questo molti wallet permettono di scegliere il percorso di derivazione.</li>
+    </ol>
+    <p>
+      Ogni passaggio corrisponde a qualcosa che il wallet mostra o nasconde. La <i>Secret Recovery Phrase</i> è la frase BIP-39; gli
+      account sono i percorsi BIP-44; la chiave privata esportata è l'output di BIP-32; l'indirizzo mostrato è già in formato EIP-55.
+      Quando si firma una transazione entra in gioco secp256k1/ECDSA.
+    </p>
+
+    <!-- =============================================================== 9 -->
+    <h2 id="conclusioni">9. Conclusioni e riferimenti</h2>
+    <p>
+      Da 12 parole a un indirizzo si attraversano sei standard e cinque tipi di operazione diversi. L'unico passaggio casuale è il primo;
+      tutto il resto è deterministico, ed è proprio questo che rende possibile il backup con una sola frase. La codifica (parole,
+      esadecimale) rende i dati usabili dalle persone; le checksum intercettano gli errori umani con probabilità misurabili; la derivazione
+      (PBKDF2, HMAC-SHA512) moltiplica un segreto in un albero di chiavi; la crittografia a chiave pubblica (secp256k1) permette le firme;
+      l'hashing (Keccak-256) produce identificatori compatti e senza struttura. Gli esperimenti confermano le proprietà statistiche attese
+      per ogni categoria, e mostrano ancora una volta che la casualità apparente non sostituisce l'analisi della struttura.
+    </p>
+    <ul class="small">
+      <li>M. Palatinus, P. Rusnak, A. Voisine, S. Bowe, <i>BIP-39: Mnemonic code for generating deterministic keys</i> (2013).</li>
+      <li>P. Wuille, <i>BIP-32: Hierarchical Deterministic Wallets</i> (2012).</li>
+      <li>M. Palatinus, P. Rusnak, <i>BIP-44: Multi-Account Hierarchy for Deterministic Wallets</i> (2014); SatoshiLabs, <i>SLIP-44: Registered coin types</i>.</li>
+      <li>Certicom Research, <i>SEC 2: Recommended Elliptic Curve Domain Parameters</i> (2000, v2.0 2010).</li>
+      <li>G. Bertoni, J. Daemen, M. Peeters, G. Van Assche, <i>The Keccak reference</i> (2011); NIST, <i>FIPS 202: SHA-3 Standard</i> (2015); NIST, <i>FIPS 180-4: Secure Hash Standard</i>.</li>
+      <li>V. Buterin, A. Van de Sande, <i>EIP-55: Mixed-case checksum address encoding</i> (2016).</li>
+      <li>H. Krawczyk, M. Bellare, R. Canetti, <i>RFC 2104: HMAC</i> (1997); B. Kaliski, <i>RFC 2898: PKCS #5 v2.0</i> (2000).</li>
+      <li>R. Rivest, A. Shamir, L. Adleman, <i>A Method for Obtaining Digital Signatures and Public-Key Cryptosystems</i> (1977/78).</li>
+    </ul>
+  </main>
+
+  <footer data-site-footer></footer>
+
+  <script src="../../assets/js/site.js"></script>
+  <script src="../../assets/js/charts.js"></script>
+  <script src="js/primitives.js"></script>
+  <script src="js/secp256k1.js"></script>
+  <script src="js/wallet.js"></script>
+  <script src="js/lab.js"></script>
+  <script src="js/demos.js"></script>
+  <script src="js/stats2.js"></script>
+</body>
+</html>
