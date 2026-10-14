@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HW1 · Chiave privata → pubblica</title>
+  <meta name="description" content="Homework 1 di Statistica: moltiplicazione scalare su una curva ellittica giocattolo (y² = x³ + 7 mod 17), visualizzazione animata ed esplorazione statistica dei punti ottenuti.">
+  <script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232a78d6'/%3E%3Ctext x='16' y='21' font-family='Arial' font-weight='700' font-size='13' fill='white' text-anchor='middle'%3EVS%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="../../assets/css/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.querySelector('main'),{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false})"></script>
+</head>
+<body data-root="../../" data-page="statistica">
+  <header data-site-header></header>
+
+  <main class="article">
+    <p class="breadcrumb"><a href="../../">Home</a> / <a href="../">Statistica</a> / HW 1</p>
+
+    <header style="margin-top:20px">
+      <span class="tag">Homework 1 · Example App</span>
+      <h1 style="margin-top:12px">Chiave privata → chiave pubblica in Ethereum</h1>
+      <p class="lead muted" style="font-size:1.15rem">
+        La moltiplicazione scalare su curva ellittica come funzione one-way: un programma
+        in JavaScript su una curva giocattolo, una visualizzazione rallentata dell'algoritmo
+        e un'esplorazione statistica dei punti ottenuti.
+      </p>
+      <div class="doc-meta">
+        <span><b>Studente:</b> Vladut Florian Stanciu</span>
+        <span><b>Corso:</b> Statistica</span>
+        <span><b>Tecnologie:</b> JavaScript, HTML, CSS (nessuna libreria esterna per i calcoli)</span>
+        <span><a href="https://github.com/Vladi2504/Vladi2504.github.io/tree/main/statistica/hw1" target="_blank" rel="noopener">Codice sorgente su GitHub</a></span>
+      </div>
+    </header>
+
+    <nav class="toc" aria-label="Indice">
+      <strong>Indice</strong>
+      <ol>
+        <li><a href="#idea">L'idea: una funzione a senso unico</a></li>
+        <li><a href="#curva">La curva giocattolo e l'addizione di punti</a></li>
+        <li><a href="#programma">Il programma: da k a Q = kG</a></li>
+        <li><a href="#visualizzazione">Visualizzazione rallentata (livello GURU)</a></li>
+        <li><a href="#statistica">Esplorazione statistica</a></li>
+        <li><a href="#discussione">Discussione: one-way vs. hash</a></li>
+        <li><a href="#bonus">Bonus: la vera secp256k1</a></li>
+        <li><a href="#conclusioni">Conclusioni e riferimenti</a></li>
+      </ol>
+    </nav>
+
+    <!-- =============================================================== 1 -->
+    <h2 id="idea">1. L'idea: una funzione a senso unico</h2>
+    <p>
+      In Ethereum (come in Bitcoin) un account è una coppia di chiavi. La <b>chiave privata</b> è
+      un numero intero \(k\) di 256 bit scelto a caso; la <b>chiave pubblica</b> è il punto
+      $$Q = kG = \underbrace{G + G + \dots + G}_{k \text{ volte}}$$
+      dove \(G\) è un punto fisso (il <i>punto base</i>) della curva ellittica <b>secp256k1</b>,
+      \(y^2 = x^3 + 7\) modulo un primo \(p \approx 2^{256}\). Dalla chiave pubblica si ottiene poi l'indirizzo.
+    </p>
+    <div class="pipeline" role="img" aria-label="Da chiave privata a indirizzo Ethereum">
+      <div class="stage"><b>Chiave privata k</b><span>intero casuale di 256 bit</span></div>
+      <div class="arrow"><b>→</b>Q = kG</div>
+      <div class="stage oneway"><b>Chiave pubblica Q</b><span>punto (x, y) della curva, 64 byte</span></div>
+      <div class="arrow"><b>→</b>Keccak-256</div>
+      <div class="stage"><b>Hash</b><span>32 byte</span></div>
+      <div class="arrow"><b>→</b>ultimi 20 byte</div>
+      <div class="stage"><b>Indirizzo</b><span>0x…, 20 byte</span></div>
+    </div>
+    <p>
+      Il passaggio \(k \mapsto kG\) si comporta come una <b>funzione one-way</b>: è deterministico e
+      veloce da calcolare (basta qualche centinaio di operazioni sui punti), mentre il problema inverso,
+      ricavare \(k\) da \(Q\), è il <b>problema del logaritmo discreto su curve ellittiche</b> (ECDLP),
+      per il quale non si conoscono algoritmi efficienti. In questo somiglia a una funzione hash crittografica,
+      ma è uno strumento diverso: è la base della crittografia a chiave pubblica e delle firme digitali (ECDSA).
+    </p>
+    <div class="callout">
+      <p>
+        Lo scopo dell'homework è capire l'idea della moltiplicazione scalare, non costruire un sistema
+        crittografico reale. Per questo si usa una <b>curva giocattolo</b> con lo stesso tipo di equazione
+        di secp256k1 ma con \(p = 17\), così ogni passaggio si può seguire a mano.
+      </p>
+    </div>
+
+    <!-- =============================================================== 2 -->
+    <h2 id="curva">2. La curva giocattolo e l'addizione di punti</h2>
+    <p>Come suggerito dalla traccia, si lavora sulla curva</p>
+    $$E(\mathbb{F}_{17}) :\quad y^2 \equiv x^3 + 7 \pmod{17}$$
+    <p>
+      I suoi punti sono le coppie di interi \((x, y)\) con \(0 \le x, y \le 16\) che soddisfano l'equazione,
+      più un punto speciale \(\mathcal{O}\), il <i>punto all'infinito</i>, che fa da elemento neutro (lo "zero").
+      Sono 17 punti più \(\mathcal{O}\), quindi \(\#E = 18\).
+      Il punto base \(G = (1, 5)\) sta sulla curva: \(5^2 = 25 \equiv 8\) e \(1^3 + 7 = 8\).
+    </p>
+
+    <h3>Addizione di punti: la regola della corda e della tangente</h3>
+    <p>
+      Per sommare due punti \(P = (x_1, y_1)\) e \(Q = (x_2, y_2)\) si traccia la retta che li unisce
+      (la tangente se \(P = Q\)). La retta taglia la curva in un terzo punto \(-R\), e il risultato \(R = P + Q\)
+      è il suo simmetrico rispetto all'asse \(x\). In formule, con tutte le operazioni modulo \(p\):
+    </p>
+    $$\lambda = \begin{cases} \dfrac{y_2 - y_1}{x_2 - x_1} & P \neq Q \quad\text{(corda)} \\[2ex] \dfrac{3x_1^2 + a}{2y_1} & P = Q \quad\text{(tangente)} \end{cases}
+    \qquad x_3 = \lambda^2 - x_1 - x_2, \qquad y_3 = \lambda(x_1 - x_3) - y_1$$
+    <p>
+      Qui \(a = 0\). "Dividere" modulo \(p\) significa moltiplicare per l'inverso, che si calcola con
+      l'algoritmo di Euclide esteso. Per esempio il raddoppio \(2G\) dà
+      \(\lambda = 3 \cdot 10^{-1} = 3 \cdot 12 = 36 \equiv 2\), poi \(x_3 = 4 - 1 - 1 = 2\) e
+      \(y_3 = 2(1 - 2) - 5 = -7 \equiv 10\). Quindi \(2G = (2, 10)\).
+      Se \(Q = -P\), cioè stessa \(x\) e \(y\) opposta, la retta è verticale e \(P + Q = \mathcal{O}\).
+    </p>
+
+    <h3>I multipli di G</h3>
+    <p>
+      Sommando ripetutamente \(G\) si ottengono i suoi multipli. Dopo 9 passi si torna a \(\mathcal{O}\):
+      \(G\) ha <b>ordine</b> \(n = 9\) e genera un sottogruppo ciclico di 9 elementi, metà dei 18 punti della curva.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>k</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th></tr></thead>
+        <tbody><tr><td><b>kG</b></td><td>(1, 5)</td><td>(2, 10)</td><td>(5, 9)</td><td>(12, 1)</td><td>(12, 16)</td><td><b>(5, 8)</b></td><td>(2, 7)</td><td>(1, 12)</td><td>\(\mathcal{O}\)</td></tr></tbody>
+      </table>
+    </div>
+    <p>
+      Con la chiave privata \(k = 6\) la chiave pubblica giocattolo è quindi \(Q = 6G = (5, 8)\).
+      Si nota già una simmetria: \(kG\) e \((9-k)G\) hanno la stessa \(x\) e \(y\) opposte, perché \((9-k)G = -kG\).
+      La ritroveremo nell'analisi statistica.
+    </p>
+
+    <!-- =============================================================== 3 -->
+    <h2 id="programma">3. Il programma: da k a Q = kG</h2>
+    <p>
+      Il programma definisce la curva, il punto base e la chiave privata, implementa l'addizione di punti
+      e calcola \(kG\) in due modi:
+    </p>
+    <ul>
+      <li><b>metodo 1, addizioni ripetute</b>: stampa \(G, 2G, 3G, \dots, kG\) e richiede \(k - 1\) addizioni;</li>
+      <li><b>metodo 2, double-and-add</b>: il metodo veloce. Si leggono i bit di \(k\) da sinistra e a ogni bit
+        si raddoppia, aggiungendo \(G\) quando il bit vale 1. Bastano circa \(\log_2 k\) passi, che è ciò che
+        rende pratico il calcolo con \(k \approx 2^{256}\).</li>
+    </ul>
+    <p>Puoi cambiare i parametri: tutta la pagina, animazione compresa, si aggiorna.</p>
+
+    <div class="panel wide">
+      <div class="controls">
+        <label class="field">Curva
+          <select id="cfg-preset"></select>
+        </label>
+        <label class="field">p (primo)
+          <input id="cfg-p" type="number" min="5" max="2000" step="1" value="17">
+        </label>
+        <label class="field">b (in y² = x³ + b)
+          <input id="cfg-b" type="number" step="1" value="7">
+        </label>
+        <label class="field">Punto base G
+          <select id="cfg-G"></select>
+        </label>
+        <label class="field">Chiave privata k
+          <input id="cfg-k" type="number" min="1" step="1" value="6">
+        </label>
+        <button class="btn primary" id="cfg-run" type="button">Calcola Q = kG</button>
+      </div>
+      <p id="cfg-err" class="small" style="color:var(--bad);margin:-4px 0 10px" role="alert"></p>
+      <pre class="console" id="console" aria-live="polite"></pre>
+      <div class="result-key">
+        <span class="label">Toy public key</span>
+        <span class="value" id="toy-key"></span>
+        <span class="small muted" id="cfg-eq"></span>
+      </div>
+    </div>
+
+    <h3>Il codice delle due funzioni principali</h3>
+    <p class="muted small">
+      Il riquadro mostra il codice effettivamente in esecuzione nella pagina, letto da
+      <a href="js/ecc.js"><code>js/ecc.js</code></a> con <code>Function.prototype.toString()</code>.
+    </p>
+    <details open>
+      <summary><b>pointAdd</b>: addizione di due punti (corda / tangente)</summary>
+      <pre data-source="pointAdd"></pre>
+    </details>
+    <details>
+      <summary><b>scalarMult</b>: double-and-add</summary>
+      <pre data-source="scalarMult"></pre>
+    </details>
+
+    <!-- =============================================================== 4 -->
+    <h2 id="visualizzazione">4. Visualizzazione rallentata (livello GURU)</h2>
+    <p>
+      Sui reali la curva è una linea continua e la regola della corda e della tangente si vede a occhio.
+      Su \(\mathbb{F}_{17}\) la "curva" è invece un insieme sparso di punti di una griglia 17 × 17, e la retta
+      \(y = \lambda(x - x_1) + y_1\) letta modulo 17 si <b>avvolge</b> sulla griglia come su un toro.
+      L'animazione mostra ogni operazione in quattro fasi: operandi, retta (i suoi 17 punti interi in arancione),
+      terzo punto di intersezione \(-R\) e riflessione \(y \to p - y\) che dà \(R\).
+    </p>
+
+    <div class="panel wide">
+      <div class="controls">
+        <label class="field">Algoritmo
+          <select id="viz-mode">
+            <option value="naive">Addizioni ripetute (G, 2G, …, kG)</option>
+            <option value="dbl">Double-and-add (veloce)</option>
+          </select>
+        </label>
+        <label class="field">Velocità <span id="viz-speed-out"></span>
+          <input id="viz-speed" type="range" min="0.25" max="4" step="0.25" value="1">
+        </label>
+        <div class="btn-row">
+          <button class="btn primary" id="viz-play" type="button">▶ Avvia</button>
+          <button class="btn" id="viz-step" type="button">Passo ›</button>
+          <button class="btn" id="viz-reset" type="button">↺ Ricomincia</button>
+        </div>
+      </div>
+      <p class="small muted" style="margin:0 0 10px">Parametri: quelli del programma (sezione 3). <span id="viz-note"></span></p>
+      <div class="viz-layout">
+        <div>
+          <canvas id="viz-canvas" class="viz-canvas" aria-label="Griglia F_p × F_p con i punti della curva e l'animazione dell'operazione corrente"></canvas>
+          <div class="viz-legend">
+            <span><i style="background:var(--series-1)"></i>accumulatore R / operando P</span>
+            <span><i style="background:var(--series-3)"></i>operando G</span>
+            <span><i style="background:var(--series-2)"></i>retta e terzo punto −R</span>
+            <span><i style="background:var(--muted)"></i>punti di ⟨G⟩</span>
+            <span><i style="border:1.2px solid var(--muted)"></i>altri punti della curva</span>
+          </div>
+        </div>
+        <div class="viz-info">
+          <p id="viz-phase" class="small" style="min-height:3em;font-weight:600" aria-live="polite"></p>
+          <div id="viz-info"></div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Intuizione geometrica sui numeri reali</h3>
+    <p>
+      La stessa equazione \(y^2 = x^3 + 7\) sui reali. Sposta \(P\) e \(Q\) lungo la curva con i cursori
+      (oppure attiva il raddoppio) per vedere la retta, il terzo punto \(-R\) e la somma \(R = P + Q\).
+      Le formule sono identiche, cambia solo l'aritmetica: frazioni reali qui, modulo 17 sopra.
+    </p>
+    <div class="panel">
+      <div class="controls">
+        <label class="field">Posizione di P
+          <input id="real-p" type="range" min="-1" max="1" step="0.001" value="-0.35">
+        </label>
+        <label class="field">Posizione di Q
+          <input id="real-q" type="range" min="-1" max="1" step="0.001" value="0.45">
+        </label>
+        <label class="field" style="flex-direction:row;align-items:center;gap:8px">
+          <input id="real-double" type="checkbox"> raddoppio (Q = P)
+        </label>
+      </div>
+      <canvas id="real-canvas" class="viz-canvas real" aria-label="Curva y² = x³ + 7 sui reali con la costruzione di P + Q"></canvas>
+      <p id="real-out" class="small muted" style="margin:8px 0 0;font-family:var(--mono)"></p>
+    </div>
+
+    <!-- =============================================================== 5 -->
+    <h2 id="statistica">5. Esplorazione statistica</h2>
+    <p>
+      La traccia chiede di ripetere l'esperimento con molti valori di \(k\) (e diversi punti base) e di
+      studiare le proprietà statistiche dei punti ottenuti. Con \(p = 17\) i punti sono solo 9 e le
+      statistiche hanno poco senso, quindi ho aggiunto curve più grandi con la stessa equazione
+      \(y^2 = x^3 + 7\). Ho scelto primi \(p \equiv 1 \pmod 3\) per cui il numero di punti è un <b>numero primo</b>,
+      proprio come in secp256k1: ogni punto diverso da \(\mathcal{O}\) genera allora tutta la curva.
+    </p>
+    <div class="callout">
+      <p>
+        <b>Due modalità di campionamento.</b> <i>Enumerazione completa</i>: \(k = 1, 2, \dots, n-1\), cioè tutte le
+        chiavi possibili. Il campione coincide con la popolazione e mostra la struttura esatta della funzione.
+        <i>Chiavi casuali</i>: \(N\) chiavi uniformi in \(\{1, \dots, n-1\}\) generate con <code>crypto.getRandomValues</code>,
+        come si fa davvero con le chiavi private. Qui i test hanno un senso inferenziale.
+      </p>
+    </div>
+
+    <div class="panel wide">
+      <div class="controls">
+        <label class="field">Curva
+          <select id="st-preset"></select>
+        </label>
+        <label class="field">Campionamento
+          <select id="st-mode">
+            <option value="all">Enumerazione completa (k = 1 … n−1)</option>
+            <option value="random">Chiavi casuali</option>
+          </select>
+        </label>
+        <label class="field" id="st-N-field">N chiavi
+          <input id="st-N" type="number" min="10" max="200000" step="100" value="5000">
+        </label>
+        <div class="btn-row">
+          <button class="btn primary" id="st-run" type="button">Esegui l'esperimento</button>
+          <button class="btn" id="st-newG" type="button">Altro punto base casuale</button>
+        </div>
+      </div>
+      <p class="small muted" style="margin:0"><span id="st-G-out"></span> <span id="st-status" role="status"></span></p>
+    </div>
+
+    <div id="st-results" hidden>
+      <div class="tiles" id="st-tiles"></div>
+
+      <h3 id="st-dist">5.1 Distribuzione delle coordinate x e y</h3>
+      <p>
+        Istogrammi delle coordinate dei punti \(kG\). Le tacche nere indicano la frequenza attesa se le
+        coordinate fossero uniformi su \(\mathbb{F}_p = \{0, \dots, p-1\}\).
+      </p>
+      <div class="charts-2">
+        <div><p class="chart-title">Coordinata x</p><div id="st-x-chart"></div></div>
+        <div><p class="chart-title">Coordinata y</p><div id="st-y-chart"></div></div>
+      </div>
+      <div class="table-wrap" id="st-chi-table" style="margin-top:14px"></div>
+      <p class="obs" id="st-xy-obs"></p>
+
+      <h3 id="st-freq">5.2 Frequenza dei singoli valori</h3>
+      <p>
+        Quante volte compare ciascun valore di \(x\)? Il grafico confronta la distribuzione osservata
+        delle frequenze con quella attesa se \(x\) fosse estratto uniformemente da \(\mathbb{F}_p\) (binomiale).
+      </p>
+      <div class="legend">
+        <span><span class="key" style="background:var(--series-1)"></span>osservato</span>
+        <span><span class="key" style="background:var(--series-2)"></span>atteso se x uniforme su F<sub>p</sub></span>
+      </div>
+      <div id="st-freq-chart"></div>
+      <p class="obs" id="st-freq-obs"></p>
+
+      <h3 id="st-bits">5.3 Distribuzione dei bit</h3>
+      <p>
+        Per ogni posizione di bit, la frazione di 1 nelle coordinate. Per una sequenza di bit casuali ideale
+        sarebbe 0,5 ovunque (linea orizzontale). Le tacche nere indicano il valore atteso per numeri uniformi
+        in \([0, p)\), che non è 0,5 per i bit alti.
+      </p>
+      <div class="legend">
+        <span><span class="key" style="background:var(--series-1)"></span>bit di x</span>
+        <span><span class="key" style="background:var(--series-3)"></span>bit di y</span>
+        <span><span class="key line" style="background:var(--text)"></span>atteso se uniforme su [0, p)</span>
+      </div>
+      <div id="st-bits-chart"></div>
+      <p class="obs" id="st-bits-obs"></p>
+
+      <h3 id="st-corr">5.4 Correlazioni tra input e output</h3>
+      <p>
+        Grafico a dispersione della chiave privata \(k\) contro la coordinata \(x\) della chiave pubblica,
+        con gli indici di correlazione lineare (Pearson) e di rango (Spearman) e due verifiche di strutture algebriche esatte.
+      </p>
+      <div id="st-corr-chart"></div>
+      <div class="table-wrap" id="st-corr-table" style="margin-top:14px"></div>
+      <p class="obs" id="st-corr-obs"></p>
+
+      <h3 id="st-aval">5.5 Effetto valanga</h3>
+      <p>
+        In una buona funzione hash, invertire un solo bit dell'input cambia in media metà dei bit dell'output, in modo
+        imprevedibile (<i>avalanche effect</i>; <i>strict avalanche criterion</i> se ogni bit di output cambia con probabilità ½).
+        Si inverte un bit di \(k\) alla volta e si contano i bit cambiati nella \(x\) di \(kG\), confrontando con SHA-256 applicata a \(k\).
+      </p>
+      <div class="legend">
+        <span><span class="key" style="background:var(--series-1)"></span>moltiplicazione scalare (x di kG)</span>
+        <span><span class="key" style="background:var(--series-2)"></span>SHA-256(k), stessi bit</span>
+        <span><span class="key line" style="background:var(--text)"></span>atteso per bit casuali (binomiale)</span>
+      </div>
+      <div id="st-aval-chart"></div>
+      <p class="chart-title" style="margin-top:14px">Probabilità che ciascun bit di output cambi</p>
+      <div id="st-sac-chart"></div>
+      <p class="obs" id="st-aval-obs"></p>
+
+      <h3 id="st-brute-h">5.6 E se provassi a invertire?</h3>
+      <p>
+        Su una curva giocattolo ricavare \(k\) da \(Q\) è immediato: basta provare \(G, 2G, 3G, \dots\) finché non si trova \(Q\).
+        Il pulsante lo fa davvero e stima quanto servirebbe su secp256k1.
+      </p>
+      <button class="btn" id="st-brute" type="button">Prova a invertire una chiave a caso</button>
+      <p class="obs" id="st-brute-out" aria-live="polite"></p>
+    </div>
+
+    <!-- =============================================================== 6 -->
+    <h2 id="discussione">6. Discussione: quali proprietà contano davvero?</h2>
+    <p>
+      La traccia chiede quali di queste proprietà statistiche sono significative per una funzione one-way
+      crittografica e quali sono invece tipiche delle funzioni hash crittografiche. Riassumo i risultati
+      degli esperimenti in tabella e poi li commento.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Proprietà</th><th>Funzione hash crittografica</th><th>Moltiplicazione scalare k ↦ kG</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Deterministica e veloce da calcolare</td><td class="yes">Richiesta</td><td class="yes">Sì (double-and-add, ~log₂ k passi)</td></tr>
+          <tr><td>Difficile da invertire (preimmagine)</td><td class="yes">Essenziale</td><td class="yes">Essenziale: è l'ECDLP. Nessun test statistico la misura</td></tr>
+          <tr><td>Resistenza alle collisioni</td><td class="yes">Essenziale (le collisioni esistono ma non si trovano)</td><td class="part">Banale: k ↦ kG è <b>iniettiva</b> su {1,…,n−1}, quindi non ci sono collisioni</td></tr>
+          <tr><td>Input di lunghezza qualsiasi → output di lunghezza fissa</td><td class="yes">Sì (comprime)</td><td class="no">No: dominio e immagine hanno n elementi (biiezione)</td></tr>
+          <tr><td>Output uniforme sul suo insieme di arrivo</td><td class="yes">Sì, su tutte le stringhe di 256 bit</td><td class="part">Sì sui punti di ⟨G⟩ (per costruzione), <b>no</b> come stringa di bit: metà delle x è esclusa, bit alto sbilanciato</td></tr>
+          <tr><td>Bit bilanciati, effetto valanga, SAC</td><td class="yes">Criteri di progetto</td><td class="part">Apparenti sulle coordinate, ma non richiesti e non garantiti</td></tr>
+          <tr><td>Nessuna correlazione input/output</td><td class="yes">Sì</td><td class="part">Correlazione lineare ≈ 0, ma relazioni algebriche esatte</td></tr>
+          <tr><td>Assenza di struttura ("oracolo casuale")</td><td class="yes">Essenziale</td><td class="no">No, e serve: (a+b)G = aG + bG è ciò che fa funzionare firme ECDSA, ECDH e wallet HD</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Distribuzione delle coordinate e frequenze</h3>
+    <p>
+      Se la chiave privata \(k\) è uniforme, allora \(kG\) è <b>esattamente</b> uniforme sul gruppo \(\langle G \rangle\),
+      perché \(k \mapsto kG\) è una biiezione tra \(\{1,\dots,n-1\}\) e \(\langle G\rangle \setminus \{\mathcal{O}\}\).
+      Quindi l'uniformità sui punti non è una proprietà "scoperta" dai test né una prova di sicurezza: è una conseguenza
+      della struttura di gruppo. Per una funzione one-way è comunque una proprietà <b>significativa</b>, perché garantisce che la chiave
+      pubblica, come punto, non riveli nulla di "statistico" su \(k\).
+    </p>
+    <p>
+      Le <b>coordinate</b> invece non sono uniformi su \(\mathbb{F}_p\). Circa metà dei valori non è mai un'ascissa,
+      perché \(x^3 + 7\) deve essere un quadrato modulo \(p\). Ogni ascissa valida compare esattamente due volte, per \(kG\) e \(-kG\).
+      La coordinata \(y\) è simmetrica (\(y\) e \(p - y\) compaiono insieme) e, dato che \(p\) è dispari, la sua parità è perfettamente
+      bilanciata. Per questo una chiave pubblica si può <i>comprimere</i> in \(x\) più un bit di parità (prefisso 02/03).
+    </p>
+
+    <h3>Distribuzione dei bit ed effetto valanga</h3>
+    <p>
+      Bilanciamento dei bit, effetto valanga e <i>strict avalanche criterion</i> sono proprietà <b>tipiche delle funzioni hash</b>
+      (e dei cifrari a blocchi). Si chiede a una hash che il suo output sia indistinguibile da bit casuali. Sulla curva
+      il bit più significativo è sbilanciato in modo strutturale ogni volta che \(p\) non è vicino a una potenza di 2, come si vede
+      bene con \(p = 1051\). Su secp256k1 il problema è trascurabile perché \(p = 2^{256} - 2^{32} - 977\).
+    </p>
+    <p>
+      L'esperimento sulla valanga mostra il punto chiave: invertendo un bit di \(k\), la \(x\) di \(kG\) cambia in media circa
+      metà dei suoi bit, quasi come SHA-256. Ma la nuova chiave pubblica si calcola <b>senza conoscere k</b>, come
+      \(Q \pm 2^j G\). L'output "sembra" casuale ma è legato all'input da una relazione algebrica perfettamente
+      prevedibile. Per una hash sarebbe un difetto grave. Per la moltiplicazione scalare è irrilevante, anzi voluto.
+    </p>
+
+    <h3>Correlazioni</h3>
+    <p>
+      Pearson e Spearman tra \(k\) e \(x(kG)\) risultano compatibili con zero, ma questo dice poco: un indice di correlazione
+      misura solo relazioni monotone. La funzione ha invece <b>strutture esatte</b> che nessun indice cattura. Il diagramma
+      \((k, x)\) è perfettamente speculare (\(x(kG) = x((n-k)G)\)) e la funzione è un omomorfismo: \((a+b)G = aG + bG\).
+    </p>
+
+    <h3>Perché la statistica non basta</h3>
+    <p>
+      Il punto più importante: ogni gruppo ciclico di ordine \(n\) è <b>isomorfo</b> a \((\mathbb{Z}_n, +)\). La funzione
+      \(k \mapsto k \cdot g \bmod n\) negli interi modulo \(n\) ha esattamente la stessa struttura di \(k \mapsto kG\): stessa
+      uniformità, stesso omomorfismo, stesse frequenze. Però si inverte all'istante con un inverso modulare. La differenza tra
+      "facile" e "impossibile" da invertire sta tutta nella <b>rappresentazione</b> dei punti, cioè nella difficoltà
+      computazionale dell'ECDLP, non in una proprietà statistica.
+    </p>
+    <p>
+      I test statistici possono quindi solo <i>falsificare</i>: una correlazione forte tra \(k\) e \(Q\) renderebbe la funzione
+      chiaramente insicura. Non possono però <i>dimostrare</i> che una funzione sia one-way. La sicurezza dipende da:
+    </p>
+    <ul>
+      <li>la <b>dimensione</b> del gruppo: con \(n = 9\) si inverte provando 9 valori, con \(n \approx 2^{256}\) il miglior attacco noto (Pollard rho) richiede circa \(2^{128}\) operazioni;</li>
+      <li>la <b>struttura</b> dell'ordine: \(n = 9 = 3^2\) è "liscio" e si attacca con Pohlig–Hellman, mentre secp256k1 ha ordine primo;</li>
+      <li>l'assenza di debolezze note della curva, ad esempio curve anomale con \(\#E = p\), come succede per \(p = 61\) e \(p = 127\) con questa stessa equazione.</li>
+    </ul>
+    <div class="callout good">
+      <p>
+        <b>In sintesi.</b> Per una funzione one-way come \(k \mapsto kG\) contano determinismo, efficienza, difficoltà di inversione
+        e uniformità dell'output <i>sul gruppo</i>. Bit bilanciati, effetto valanga, assenza di correlazioni e di struttura
+        algebrica, output di lunghezza fissa e resistenza alle collisioni sono invece le proprietà che si chiedono a una
+        <b>funzione hash</b>. Per questo Ethereum combina le due cose: la curva ellittica dà la relazione chiave
+        privata/pubblica, necessaria per le firme, e Keccak-256 trasforma la chiave pubblica nell'indirizzo, dove serve
+        un'impronta di lunghezza fissa e senza struttura.
+      </p>
+    </div>
+
+    <!-- =============================================================== 7 -->
+    <h2 id="bonus">7. Bonus: la vera secp256k1</h2>
+    <p>
+      Lo stesso algoritmo di <a href="#programma">sezione 3</a>, con <code>BigInt</code> e i parametri reali di secp256k1:
+      \(p = 2^{256} - 2^{32} - 977\), il punto base standard \(G\) e l'ordine \(n \approx 1{,}158 \cdot 10^{77}\).
+      Dalla chiave pubblica si ricava anche l'indirizzo Ethereum con Keccak-256, implementata in
+      <a href="js/hashes.js"><code>js/hashes.js</code></a>.
+    </p>
+    <div class="callout warn">
+      <p><b>Attenzione:</b> è un esempio didattico, non a tempo costante. Non inserire mai una chiave privata reale.</p>
+    </div>
+    <div class="panel">
+      <div class="controls">
+        <label class="field" style="flex:1 1 100%">Chiave privata (esadecimale)
+          <input id="sk-in" class="wide-input" type="text" value="1" spellcheck="false" autocomplete="off">
+        </label>
+        <div class="btn-row">
+          <button class="btn primary" id="sk-run" type="button">Calcola chiave pubblica e indirizzo</button>
+          <button class="btn" id="sk-rand" type="button">Chiave casuale</button>
+          <button class="btn" id="sk-one" type="button">k = 1 (vettore di test)</button>
+        </div>
+      </div>
+      <div class="table-wrap" style="margin:0">
+        <table id="sk-out" style="font-family:var(--mono);font-size:0.8rem;word-break:break-all"></table>
+      </div>
+      <p class="small muted" style="margin:10px 0 0">
+        Verifica: con k = 1 la chiave pubblica è G stesso e l'indirizzo noto è
+        <code>0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf</code>.
+      </p>
+    </div>
+
+    <!-- =============================================================== 8 -->
+    <h2 id="conclusioni">8. Conclusioni e riferimenti</h2>
+    <p>
+      Con una curva di 17 elementi si vede tutto il meccanismo che in Ethereum protegge ogni account. L'addizione di punti
+      è una regola geometrica tradotta in aritmetica modulare. La moltiplicazione scalare \(kG\) si calcola in pochi passi
+      con double-and-add. Invertirla è un problema di logaritmo discreto, banale per gruppi piccoli e intrattabile per
+      \(n \approx 2^{256}\). L'analisi statistica mostra che i punti \(kG\) "sembrano" casuali sotto molti aspetti, ma la
+      funzione ha una struttura algebrica forte e voluta. Proprio questa struttura la distingue da una funzione hash e la
+      rende utile per la crittografia a chiave pubblica.
+    </p>
+    <ul class="small">
+      <li>SEC 2: <i>Recommended Elliptic Curve Domain Parameters</i>, Certicom Research, v2.0 (2010), parametri di secp256k1.</li>
+      <li>D. Hankerson, A. Menezes, S. Vanstone, <i>Guide to Elliptic Curve Cryptography</i>, Springer (2004).</li>
+      <li>G. Wood, <i>Ethereum: A Secure Decentralised Generalised Transaction Ledger</i> (Yellow Paper), appendice F.</li>
+      <li>V. Buterin et al., <i>EIP-55: Mixed-case checksum address encoding</i>.</li>
+      <li>A. F. Webster, S. E. Tavares, <i>On the Design of S-Boxes</i>, CRYPTO '85 (strict avalanche criterion).</li>
+    </ul>
+  </main>
+
+  <footer data-site-footer></footer>
+
+  <script src="../../assets/js/site.js"></script>
+  <script src="js/ecc.js"></script>
+  <script src="js/hashes.js"></script>
+  <script src="js/secp256k1.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/program.js"></script>
+  <script src="js/visual.js"></script>
+  <script src="js/realcurve.js"></script>
+  <script src="js/stats.js"></script>
+  <script>
+    // Sezione bonus: secp256k1 reale
+    (function () {
+      const inp = document.getElementById('sk-in');
+      const out = document.getElementById('sk-out');
+      const row = (k, v) => `<tr><th style="white-space:nowrap;font-family:var(--font)">${k}</th><td>${v}</td></tr>`;
+      function go() {
+        try {
+          const t0 = performance.now();
+          const r = Secp256k1.derive(inp.value);
+          const ms = performance.now() - t0;
+          out.innerHTML =
+            row('k', r.k) +
+            row('Q.x', r.x) +
+            row('Q.y', r.y) +
+            row('Chiave pubblica (non compressa)', r.uncompressed) +
+            row('Chiave pubblica (compressa)', r.compressed) +
+            row('Keccak-256(Q.x ‖ Q.y)', r.keccak) +
+            row('Indirizzo Ethereum', '<b>' + r.address + '</b>') +
+            row('Tempo di calcolo', ms.toFixed(1) + ' ms');
+        } catch (e) {
+          out.innerHTML = row('Errore', e.message);
+        }
+      }
+      document.getElementById('sk-run').addEventListener('click', go);
+      document.getElementById('sk-rand').addEventListener('click', () => { inp.value = Secp256k1.randomPrivateKey(); go(); });
+      document.getElementById('sk-one').addEventListener('click', () => { inp.value = '1'; go(); });
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+      go();
+    })();
+  </script>
+</body>
+</html>

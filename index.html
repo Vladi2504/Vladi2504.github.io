@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vladut Florian Stanciu</title>
+  <meta name="description" content="Sito personale di Vladut Florian Stanciu: progetti, corsi universitari e homework.">
+  <script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232a78d6'/%3E%3Ctext x='16' y='21' font-family='Arial' font-weight='700' font-size='13' fill='white' text-anchor='middle'%3EVS%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body data-root="./" data-page="home">
+  <header data-site-header></header>
+
+  <main class="container">
+    <section class="hero">
+      <div class="kicker">Ciao, sono Vladi</div>
+      <h1>Progetti, corsi e homework</h1>
+      <p class="lead">
+        Questo è il mio spazio su GitHub Pages. Qui raccolgo i progetti a cui lavoro
+        e il materiale dei corsi universitari, compresi gli homework da consegnare.
+      </p>
+      <div class="btn-row">
+        <a class="btn primary" href="statistica/">Homework di Statistica →</a>
+        <a class="btn" href="https://github.com/Vladi2504" target="_blank" rel="noopener">Profilo GitHub</a>
+      </div>
+    </section>
+
+    <div class="section-title">
+      <h2 id="corsi">Corsi</h2>
+    </div>
+    <div class="grid">
+      <a class="card" href="statistica/">
+        <span class="tag">Università</span>
+        <h3 style="margin-top:10px">Statistica</h3>
+        <p>Homework del corso: applicazioni interattive in JavaScript/HTML/CSS ed esplorazioni statistiche.</p>
+        <div class="meta"><span>1 homework pubblicato</span></div>
+      </a>
+    </div>
+
+    <div class="section-title">
+      <h2 id="progetti">Progetti</h2>
+      <a class="small" href="https://github.com/Vladi2504?tab=repositories" target="_blank" rel="noopener">Tutti i repository →</a>
+    </div>
+    <div class="grid" id="repo-list">
+      <p class="muted">Caricamento dei repository da GitHub…</p>
+    </div>
+  </main>
+
+  <footer data-site-footer></footer>
+
+  <script src="assets/js/site.js"></script>
+  <script>
+    // Elenco dei repository pubblici, letto dall'API pubblica di GitHub.
+    (function () {
+      const box = document.getElementById('repo-list');
+      const user = 'Vladi2504';
+      const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      fetch('https://api.github.com/users/' + user + '/repos?sort=updated&per_page=30')
+        .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(repos => {
+          repos = repos.filter(r => !r.fork && r.name.toLowerCase() !== (user + '.github.io').toLowerCase());
+          if (!repos.length) {
+            box.innerHTML = '<p class="muted">Nessun repository pubblico da mostrare per ora.</p>';
+            return;
+          }
+          box.innerHTML = repos.slice(0, 9).map(r => `
+            <a class="card" href="${esc(r.html_url)}" target="_blank" rel="noopener">
+              <h3>${esc(r.name)}</h3>
+              <p>${r.description ? esc(r.description) : '<span class="muted">Nessuna descrizione</span>'}</p>
+              <div class="meta">
+                ${r.language ? `<span>${esc(r.language)}</span>` : ''}
+                <span>Aggiornato il ${new Date(r.pushed_at).toLocaleDateString('it-IT')}</span>
+              </div>
+            </a>`).join('');
+        })
+        .catch(() => {
+          box.innerHTML = '<p class="muted">Impossibile caricare i repository in questo momento. ' +
+            'Li trovi sul <a href="https://github.com/' + user + '" target="_blank" rel="noopener">profilo GitHub</a>.</p>';
+        });
+    })();
+  </script>
+</body>
+</html>
